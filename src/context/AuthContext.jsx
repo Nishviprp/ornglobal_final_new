@@ -46,6 +46,7 @@ export function AuthProvider({ children }) {
     hospitalId: profile?.hospital_id ?? null,
     loading,
     signOut: () => supabase.auth.signOut(),
+    refreshProfile: () => loadProfile(session?.user?.id),
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

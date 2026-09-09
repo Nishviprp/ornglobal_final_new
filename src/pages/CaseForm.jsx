@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { FiPlus, FiX, FiArrowLeft, FiLock, FiCheckCircle } from 'react-icons/fi'
+import { FiPlus, FiX, FiArrowLeft, FiLock, FiCheckCircle, FiTrash2 } from 'react-icons/fi'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import GrowableSelect from '../components/GrowableSelect'
@@ -51,6 +51,7 @@ export default function CaseForm() {
   const [loadingCase, setLoadingCase] = useState(Boolean(caseId))
   const [saving, setSaving] = useState(false)
   const [togglingStatus, setTogglingStatus] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (!caseId) return
@@ -237,6 +238,38 @@ export default function CaseForm() {
     toast.success(nextStatus === 'approved' ? 'Case approved and locked' : 'Case unlocked')
   }
 
+  async function handleDelete() {
+    if (!caseId) return
+    if (!window.confirm('Delete this case permanently? This also removes all its attached files. This cannot be undone.')) {
+      return
+    }
+
+    setDeleting(true)
+
+    if (files.length > 0) {
+      const paths = files.map((f) => f.storage_path)
+      const { error: storageError } = await supabase.storage
+        .from('case-attachments')
+        .remove(paths)
+      if (storageError) {
+        toast.error(`Could not remove attached files: ${storageError.message}`)
+        setDeleting(false)
+        return
+      }
+    }
+
+    const { error } = await supabase.from('surgical_cases').delete().eq('id', caseId)
+    setDeleting(false)
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    toast.success('Case deleted')
+    navigate('/dashboard', { replace: true })
+  }
+
   if (authLoading || loadingCase) {
     return (
       <div className="flex h-screen items-center justify-center text-slate-500">
@@ -256,7 +289,7 @@ export default function CaseForm() {
         </Link>
 
         <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-slate-900">
                 {caseId ? 'Edit surgical case' : 'New surgical case'}
@@ -267,7 +300,7 @@ export default function CaseForm() {
             </div>
 
             {caseId && (
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                 <span
                   className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                     caseRow?.status === 'approved'
@@ -293,6 +326,16 @@ export default function CaseForm() {
                         <FiCheckCircle className="h-3.5 w-3.5" /> Approve
                       </>
                     )}
+                  </button>
+                )}
+                {canApprove && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                  >
+                    <FiTrash2 className="h-3.5 w-3.5" /> {deleting ? 'Deleting…' : 'Delete'}
                   </button>
                 )}
               </div>
@@ -383,30 +426,32 @@ export default function CaseForm() {
                 ) : (
                   <div className="mt-3 space-y-2">
                     {customFields.map((field, index) => (
-                      <div key={index} className="flex gap-2">
+                      <div key={index} className="flex flex-col gap-2 sm:flex-row">
                         <input
                           type="text"
                           placeholder="Field name"
                           value={field.field_name}
                           onChange={(e) => updateCustomField(index, 'field_name', e.target.value)}
-                          className="w-1/3 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-500 sm:w-1/3"
                         />
-                        <input
-                          type="text"
-                          placeholder="Value"
-                          value={field.field_value}
-                          onChange={(e) => updateCustomField(index, 'field_value', e.target.value)}
-                          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-500"
-                        />
-                        {canEdit && (
-                          <button
-                            type="button"
-                            onClick={() => removeCustomField(index)}
-                            className="rounded-lg border border-slate-300 px-2.5 text-slate-500 hover:bg-slate-50"
-                          >
-                            <FiX className="h-4 w-4" />
-                          </button>
-                        )}
+                        <div className="flex flex-1 gap-2">
+                          <input
+                            type="text"
+                            placeholder="Value"
+                            value={field.field_value}
+                            onChange={(e) => updateCustomField(index, 'field_value', e.target.value)}
+                            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          />
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => removeCustomField(index)}
+                              className="shrink-0 rounded-lg border border-slate-300 px-2.5 text-slate-500 hover:bg-slate-50"
+                            >
+                              <FiX className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

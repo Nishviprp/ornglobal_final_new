@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import {
   FiImage,
@@ -10,17 +10,27 @@ import {
   FiRefreshCw,
   FiUploadCloud,
   FiTrash2,
+  FiEye,
+  FiEyeOff,
 } from 'react-icons/fi'
 import { supabase } from '../lib/supabaseClient'
 
 const BUCKET = 'case-attachments'
 
+function kindOf(fileType = '') {
+  if (fileType.startsWith('image/')) return 'image'
+  if (fileType.startsWith('video/')) return 'video'
+  if (fileType.startsWith('audio/')) return 'audio'
+  if (fileType === 'application/pdf' || fileType.startsWith('text/')) return 'doc'
+  return 'other'
+}
+
 function iconFor(fileType = '') {
-  if (fileType.startsWith('image/')) return <FiImage className="h-5 w-5 text-brand-600" />
-  if (fileType.startsWith('video/')) return <FiFilm className="h-5 w-5 text-brand-600" />
-  if (fileType.startsWith('audio/')) return <FiMusic className="h-5 w-5 text-brand-600" />
-  if (fileType === 'application/pdf' || fileType.startsWith('text/'))
-    return <FiFileText className="h-5 w-5 text-brand-600" />
+  const kind = kindOf(fileType)
+  if (kind === 'image') return <FiImage className="h-5 w-5 text-brand-600" />
+  if (kind === 'video') return <FiFilm className="h-5 w-5 text-brand-600" />
+  if (kind === 'audio') return <FiMusic className="h-5 w-5 text-brand-600" />
+  if (kind === 'doc') return <FiFileText className="h-5 w-5 text-brand-600" />
   return <FiFile className="h-5 w-5 text-brand-600" />
 }
 
@@ -46,8 +56,57 @@ export default function FileAttachments({
   canEdit = true,
 }) {
   const [uploading, setUploading] = useState(false)
+  const [previewUrls, setPreviewUrls] = useState({})
+  const [thumbUrls, setThumbUrls] = useState({})
+  const [expandedId, setExpandedId] = useState(null)
   const addInputRef = useRef(null)
   const replaceInputRef = useRef({})
+
+  // Load small thumbnails for images up front — video/audio previews are
+  // loaded on demand (see togglePreview) to avoid generating a signed URL
+  // for every attachment on every page load.
+  useEffect(() => {
+    if (!canDownload) return
+    const imagesNeedingThumbs = files.filter(
+      (f) => kindOf(f.file_type) === 'image' && !thumbUrls[f.id]
+    )
+    if (imagesNeedingThumbs.length === 0) return
+
+    let cancelled = false
+    async function loadThumbs() {
+      for (const f of imagesNeedingThumbs) {
+        const { data, error } = await supabase.storage
+          .from(BUCKET)
+          .createSignedUrl(f.storage_path, 3600)
+        if (!cancelled && !error) {
+          setThumbUrls((prev) => ({ ...prev, [f.id]: data.signedUrl }))
+        }
+      }
+    }
+    loadThumbs()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, canDownload])
+
+  async function togglePreview(fileRow) {
+    if (expandedId === fileRow.id) {
+      setExpandedId(null)
+      return
+    }
+    if (!previewUrls[fileRow.id]) {
+      const { data, error } = await supabase.storage
+        .from(BUCKET)
+        .createSignedUrl(fileRow.storage_path, 3600)
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+      setPreviewUrls((prev) => ({ ...prev, [fileRow.id]: data.signedUrl }))
+    }
+    setExpandedId(fileRow.id)
+  }
 
   async function handleAddFiles(e) {
     const selected = Array.from(e.target.files || [])
@@ -119,6 +178,16 @@ export default function FileAttachments({
     }
 
     onFilesChange((prev) => prev.map((f) => (f.id === fileRow.id ? updated : f)))
+    setThumbUrls((prev) => {
+      const next = { ...prev }
+      delete next[fileRow.id]
+      return next
+    })
+    setPreviewUrls((prev) => {
+      const next = { ...prev }
+      delete next[fileRow.id]
+      return next
+    })
     toast.success(`Replaced ${fileRow.file_name}`)
   }
 
@@ -183,55 +252,101 @@ export default function FileAttachments({
         <p className="mt-3 text-sm text-slate-400">No files attached yet.</p>
       ) : (
         <ul className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-200">
-          {files.map((f) => (
-            <li key={f.id} className="flex items-center gap-3 px-3 py-2.5">
-              {iconFor(f.file_type)}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-700">{f.file_name}</p>
-                <p className="text-xs text-slate-400">{formatSize(f.size_bytes)}</p>
-              </div>
-              {canDownload && (
-                <button
-                  type="button"
-                  title="Download"
-                  onClick={() => handleDownload(f)}
-                  className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand-600"
-                >
-                  <FiDownload className="h-4 w-4" />
-                </button>
-              )}
-              {canEdit && (
-                <>
-                  <button
-                    type="button"
-                    title="Replace"
-                    onClick={() => replaceInputRef.current[f.id]?.click()}
-                    className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand-600"
-                  >
-                    <FiRefreshCw className="h-4 w-4" />
-                  </button>
-                  <input
-                    type="file"
-                    ref={(el) => (replaceInputRef.current[f.id] = el)}
-                    className="hidden"
-                    onChange={(e) => {
-                      const newFile = e.target.files?.[0]
-                      if (newFile) handleReplace(f, newFile)
-                      e.target.value = ''
-                    }}
-                  />
-                  <button
-                    type="button"
-                    title="Delete"
-                    onClick={() => handleDelete(f)}
-                    className="rounded-md p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600"
-                  >
-                    <FiTrash2 className="h-4 w-4" />
-                  </button>
-                </>
-              )}
-            </li>
-          ))}
+          {files.map((f) => {
+            const kind = kindOf(f.file_type)
+            const canPreview = canDownload && (kind === 'video' || kind === 'audio')
+            const isExpanded = expandedId === f.id
+
+            return (
+              <li key={f.id} className="px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-3">
+                  {kind === 'image' && thumbUrls[f.id] ? (
+                    <img
+                      src={thumbUrls[f.id]}
+                      alt={f.file_name}
+                      className="h-10 w-10 shrink-0 rounded object-cover"
+                    />
+                  ) : (
+                    <span className="shrink-0">{iconFor(f.file_type)}</span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-slate-700">{f.file_name}</p>
+                    <p className="text-xs text-slate-400">{formatSize(f.size_bytes)}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {canPreview && (
+                      <button
+                        type="button"
+                        title={isExpanded ? 'Hide preview' : 'Preview'}
+                        onClick={() => togglePreview(f)}
+                        className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand-600"
+                      >
+                        {isExpanded ? (
+                          <FiEyeOff className="h-4 w-4" />
+                        ) : (
+                          <FiEye className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
+                    {canDownload && (
+                      <button
+                        type="button"
+                        title="Download"
+                        onClick={() => handleDownload(f)}
+                        className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand-600"
+                      >
+                        <FiDownload className="h-4 w-4" />
+                      </button>
+                    )}
+                    {canEdit && (
+                      <>
+                        <button
+                          type="button"
+                          title="Replace"
+                          onClick={() => replaceInputRef.current[f.id]?.click()}
+                          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand-600"
+                        >
+                          <FiRefreshCw className="h-4 w-4" />
+                        </button>
+                        <input
+                          type="file"
+                          ref={(el) => (replaceInputRef.current[f.id] = el)}
+                          className="hidden"
+                          onChange={(e) => {
+                            const newFile = e.target.files?.[0]
+                            if (newFile) handleReplace(f, newFile)
+                            e.target.value = ''
+                          }}
+                        />
+                        <button
+                          type="button"
+                          title="Delete"
+                          onClick={() => handleDelete(f)}
+                          className="rounded-md p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <FiTrash2 className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {isExpanded && previewUrls[f.id] && (
+                  <div className="mt-2.5">
+                    {kind === 'video' ? (
+                      <video
+                        src={previewUrls[f.id]}
+                        controls
+                        className="max-h-64 w-full rounded-lg bg-black"
+                      />
+                    ) : (
+                      <audio src={previewUrls[f.id]} controls className="w-full" />
+                    )}
+                  </div>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

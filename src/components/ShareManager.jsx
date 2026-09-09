@@ -146,11 +146,11 @@ export default function ShareManager({ caseId, hospitalId, currentUserId }) {
         </ul>
       )}
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <select
           value={selectedUser}
           onChange={(e) => setSelectedUser(e.target.value)}
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 sm:flex-1"
         >
           <option value="">Select a colleague…</option>
           {availableColleagues.map((c) => (

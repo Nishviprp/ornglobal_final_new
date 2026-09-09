@@ -114,7 +114,7 @@ export default function GrowableSelect({
           <option>{disabledReason || `Select ${label.toLowerCase()} first`}</option>
         </select>
       ) : adding && !readOnly ? (
-        <div className="mt-1 flex gap-2">
+        <div className="mt-1 flex flex-col gap-2">
           <input
             autoFocus
             type="text"
@@ -129,6 +129,7 @@ export default function GrowableSelect({
             placeholder={`New ${label.toLowerCase()} name`}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
+          <div className="flex gap-2">
           <button
             type="button"
             onClick={handleAddNew}
@@ -146,6 +147,7 @@ export default function GrowableSelect({
           >
             Cancel
           </button>
+          </div>
         </div>
       ) : (
         <select
