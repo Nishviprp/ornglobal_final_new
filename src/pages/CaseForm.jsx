@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { FiPlus, FiX, FiArrowLeft, FiLock, FiCheckCircle, FiTrash2 } from 'react-icons/fi'
 import { supabase } from '../lib/supabaseClient'
@@ -23,6 +23,7 @@ const TEXT_FIELDS = [
 ]
 
 const emptyForm = {
+  title: '',
   specialtyId: '',
   procedureId: '',
   surgeonId: '',
@@ -41,7 +42,9 @@ const emptyForm = {
 export default function CaseForm() {
   const { id: caseId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, hospitalId, loading: authLoading } = useAuth()
+  const isNew = Boolean(location.state?.isNew)
 
   const [form, setForm] = useState(emptyForm)
   const [caseRow, setCaseRow] = useState(null)
@@ -49,9 +52,43 @@ export default function CaseForm() {
   const [customFields, setCustomFields] = useState([])
   const [files, setFiles] = useState([])
   const [loadingCase, setLoadingCase] = useState(Boolean(caseId))
+  const [preparingNew, setPreparingNew] = useState(!caseId)
   const [saving, setSaving] = useState(false)
   const [togglingStatus, setTogglingStatus] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Visiting "/cases/new" immediately creates a bare draft case behind
+  // the scenes and hops to "/cases/:id" — so file attachments (and
+  // everything else) are available right away instead of only after
+  // an initial save.
+  useEffect(() => {
+    if (caseId) return
+    if (!hospitalId || !user) return
+    let cancelled = false
+
+    async function createDraft() {
+      const { data, error } = await supabase
+        .from('surgical_cases')
+        .insert({ hospital_id: hospitalId, created_by: user.id })
+        .select('id')
+        .single()
+
+      if (cancelled) return
+
+      if (error) {
+        toast.error(error.message)
+        setPreparingNew(false)
+        return
+      }
+
+      navigate(`/cases/${data.id}`, { replace: true, state: { isNew: true } })
+    }
+
+    createDraft()
+    return () => {
+      cancelled = true
+    }
+  }, [caseId, hospitalId, user, navigate])
 
   useEffect(() => {
     if (!caseId) return
@@ -71,6 +108,7 @@ export default function CaseForm() {
 
       setCaseRow(row)
       setForm({
+        title: row.title || '',
         specialtyId: row.specialty_id || '',
         procedureId: row.procedure_id || '',
         surgeonId: row.surgeon_id || '',
@@ -151,6 +189,7 @@ export default function CaseForm() {
 
     const payload = {
       hospital_id: hospitalId,
+      title: form.title.trim() || null,
       specialty_id: form.specialtyId || null,
       procedure_id: form.procedureId || null,
       surgeon_id: form.surgeonId || null,
@@ -270,10 +309,10 @@ export default function CaseForm() {
     navigate('/dashboard', { replace: true })
   }
 
-  if (authLoading || loadingCase) {
+  if (authLoading || loadingCase || preparingNew) {
     return (
       <div className="flex h-screen items-center justify-center text-slate-500">
-        Loading…
+        {preparingNew ? 'Preparing new case…' : 'Loading…'}
       </div>
     )
   }
@@ -292,10 +331,10 @@ export default function CaseForm() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-slate-900">
-                {caseId ? 'Edit surgical case' : 'New surgical case'}
+                {isNew ? 'New surgical case' : 'Edit surgical case'}
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Document the procedure details below.
+                Document the procedure details below — you can attach files right away.
               </p>
             </div>
 
@@ -355,6 +394,20 @@ export default function CaseForm() {
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-6">
             <fieldset disabled={!canEdit} className="space-y-6 disabled:opacity-75">
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Case title</label>
+                <input
+                  type="text"
+                  value={form.title}
+                  onChange={updateField('title')}
+                  placeholder="e.g. Smith — Knee Arthroscopy, 9/9"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-500"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Optional — shown on the dashboard instead of "Untitled procedure".
+                </p>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <GrowableSelect
                   label="Surgical Specialty"
@@ -464,30 +517,24 @@ export default function CaseForm() {
                   disabled={saving}
                   className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : caseId ? 'Save changes' : 'Create case'}
+                  {saving ? 'Saving…' : isNew ? 'Create case' : 'Save changes'}
                 </button>
               )}
             </fieldset>
           </form>
 
           <div className="mt-8 space-y-8 border-t border-slate-100 pt-6">
-            {caseId ? (
-              <FileAttachments
-                caseId={caseId}
-                hospitalId={hospitalId}
-                userId={user.id}
-                files={files}
-                onFilesChange={setFiles}
-                canDownload={canDownload}
-                canEdit={canEdit}
-              />
-            ) : (
-              <p className="text-sm text-slate-400">
-                Save the case first, then you can attach images, video, PDFs, text files, or voice recordings.
-              </p>
-            )}
+            <FileAttachments
+              caseId={caseId}
+              hospitalId={hospitalId}
+              userId={user.id}
+              files={files}
+              onFilesChange={setFiles}
+              canDownload={canDownload}
+              canEdit={canEdit}
+            />
 
-            {caseId && isCreator && (
+            {isCreator && (
               <ShareManager caseId={caseId} hospitalId={hospitalId} currentUserId={user.id} />
             )}
           </div>

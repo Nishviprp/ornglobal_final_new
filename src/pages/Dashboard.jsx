@@ -26,7 +26,7 @@ export default function Dashboard() {
       const { data, error } = await supabase
         .from('surgical_cases')
         .select(
-          'id, created_at, status, specialties(name), procedures(name), surgeons(name)'
+          'id, created_at, status, title, specialties(name), procedures(name), surgeons(name)'
         )
         .eq('hospital_id', hospitalId)
         .order('created_at', { ascending: false })
@@ -47,7 +47,7 @@ export default function Dashboard() {
     return cases.filter((c) => {
       if (statusFilter !== 'all' && c.status !== statusFilter) return false
       if (!query) return true
-      const haystack = [c.specialties?.name, c.procedures?.name, c.surgeons?.name]
+      const haystack = [c.title, c.specialties?.name, c.procedures?.name, c.surgeons?.name]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
@@ -136,8 +136,10 @@ export default function Dashboard() {
                     <FiFileText className="h-5 w-5 shrink-0 text-brand-600" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-800">
-                        {c.procedures?.name || 'Untitled procedure'}
-                        {c.surgeons?.name ? ` — ${c.surgeons.name}` : ''}
+                        {c.title ||
+                          `${c.procedures?.name || 'Untitled procedure'}${
+                            c.surgeons?.name ? ` — ${c.surgeons.name}` : ''
+                          }`}
                       </p>
                       <p className="text-xs text-slate-400">
                         {c.specialties?.name || 'No specialty'} ·{' '}
