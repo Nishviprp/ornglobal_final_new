@@ -14,6 +14,7 @@ export default function Signup() {
     lastName: '',
     email: '',
     password: '',
+    confirmPassword: '',
     hospitalId: '',
   })
 
@@ -24,12 +25,23 @@ export default function Signup() {
   async function handleSubmit(e) {
     e.preventDefault()
 
-    if (!form.firstName || !form.lastName || !form.email || !form.password || !form.hospitalId) {
+    if (
+      !form.firstName ||
+      !form.lastName ||
+      !form.email ||
+      !form.password ||
+      !form.confirmPassword ||
+      !form.hospitalId
+    ) {
       toast.error('Please fill in every field.')
       return
     }
     if (form.password.length < 6) {
       toast.error('Password must be at least 6 characters.')
+      return
+    }
+    if (form.password !== form.confirmPassword) {
+      toast.error('Passwords do not match.')
       return
     }
 
@@ -108,6 +120,16 @@ export default function Signup() {
               onChange={updateField('password')}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               placeholder="At least 6 characters"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Re-enter password</label>
+            <PasswordInput
+              value={form.confirmPassword}
+              onChange={updateField('confirmPassword')}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              placeholder="Repeat password"
             />
           </div>
 
