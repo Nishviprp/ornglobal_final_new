@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabaseClient'
+import GrowableSelect from '../components/GrowableSelect'
+import PasswordInput from '../components/PasswordInput'
 
 export default function Signup() {
   const navigate = useNavigate()
-  const [hospitals, setHospitals] = useState([])
-  const [loadingHospitals, setLoadingHospitals] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
   const [form, setForm] = useState({
@@ -16,23 +16,6 @@ export default function Signup() {
     password: '',
     hospitalId: '',
   })
-
-  useEffect(() => {
-    async function loadHospitals() {
-      const { data, error } = await supabase
-        .from('hospitals')
-        .select('id, name')
-        .order('name', { ascending: true })
-
-      if (error) {
-        toast.error('Could not load hospital list.')
-      } else {
-        setHospitals(data)
-      }
-      setLoadingHospitals(false)
-    }
-    loadHospitals()
-  }, [])
 
   function updateField(field) {
     return (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
@@ -120,8 +103,7 @@ export default function Signup() {
 
           <div>
             <label className="block text-sm font-medium text-slate-700">Password</label>
-            <input
-              type="password"
+            <PasswordInput
               value={form.password}
               onChange={updateField('password')}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -129,24 +111,13 @@ export default function Signup() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Hospital</label>
-            <select
-              value={form.hospitalId}
-              onChange={updateField('hospitalId')}
-              disabled={loadingHospitals}
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              <option value="">
-                {loadingHospitals ? 'Loading hospitals…' : 'Select a hospital'}
-              </option>
-              {hospitals.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <GrowableSelect
+            label="Hospital"
+            table="hospitals"
+            scoped={false}
+            value={form.hospitalId}
+            onChange={(id) => setForm((prev) => ({ ...prev, hospitalId: id }))}
+          />
 
           <button
             type="submit"

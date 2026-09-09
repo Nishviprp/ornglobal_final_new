@@ -3,10 +3,16 @@ import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabaseClient'
 
 /**
- * A dropdown backed by a hospital-scoped Supabase table (specialties,
- * procedures, surgeons). Anyone at the hospital can pick an existing
+ * A dropdown backed by a Supabase table. Anyone can pick an existing
  * option or type a new one — new options are inserted immediately and
- * become available to everyone else at that hospital.
+ * become available to everyone else.
+ *
+ * Two modes:
+ *  - scoped (default, used for specialties/procedures/surgeons): options
+ *    are filtered to `hospitalId` and new rows are tagged with it.
+ *  - unscoped (`scoped={false}`, used for the global `hospitals` table):
+ *    no hospital_id column at all — every option is visible to everyone,
+ *    including signed-out visitors on the Signup page.
  *
  * Pass `filterColumn` + `filterValue` to scope options further (used for
  * procedures, which are also filtered by the chosen specialty).
@@ -21,6 +27,7 @@ export default function GrowableSelect({
   filterValue,
   disabledReason,
   readOnly = false,
+  scoped = true,
 }) {
   const [options, setOptions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -30,7 +37,7 @@ export default function GrowableSelect({
   const isLocked = Boolean(filterColumn) && !filterValue
 
   useEffect(() => {
-    if (!hospitalId || isLocked) {
+    if ((scoped && !hospitalId) || isLocked) {
       setOptions([])
       setLoading(false)
       return
@@ -42,9 +49,11 @@ export default function GrowableSelect({
       let query = supabase
         .from(table)
         .select('id, name')
-        .eq('hospital_id', hospitalId)
         .order('name', { ascending: true })
 
+      if (scoped) {
+        query = query.eq('hospital_id', hospitalId)
+      }
       if (filterColumn && filterValue) {
         query = query.eq(filterColumn, filterValue)
       }
@@ -64,7 +73,7 @@ export default function GrowableSelect({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hospitalId, filterValue, isLocked])
+  }, [hospitalId, filterValue, isLocked, scoped])
 
   function handleSelectChange(e) {
     const val = e.target.value
@@ -79,7 +88,8 @@ export default function GrowableSelect({
     const trimmed = newName.trim()
     if (!trimmed) return
 
-    const row = { hospital_id: hospitalId, name: trimmed }
+    const row = { name: trimmed }
+    if (scoped) row.hospital_id = hospitalId
     if (filterColumn && filterValue) row[filterColumn] = filterValue
 
     const { data, error } = await supabase

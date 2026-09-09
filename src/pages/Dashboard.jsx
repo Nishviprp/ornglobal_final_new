@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { FiPlus, FiFileText, FiSearch, FiUser } from 'react-icons/fi'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import HospitalSwitcher from '../components/HospitalSwitcher'
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All statuses' },
@@ -64,7 +65,8 @@ export default function Dashboard() {
               Signed in as <span className="font-medium text-slate-700">{user?.email}</span>
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <HospitalSwitcher />
             <Link
               to="/profile"
               className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
